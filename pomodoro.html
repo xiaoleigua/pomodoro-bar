@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>番茄钟</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    display: flex; justify-content: center; align-items: center;
+    min-height: 100vh;
+    background: #1a1a2e;
+    color: #eee;
+    transition: background 0.5s;
+  }
+  body.break { background: #16213e; }
+  body.long-break { background: #0f3460; }
+
+  .container {
+    text-align: center;
+    max-width: 400px; width: 90%;
+  }
+
+  h1 {
+    font-size: 1.6rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+    color: #e94560;
+  }
+
+  .mode-tabs {
+    display: flex; gap: 6px; margin-bottom: 28px;
+    background: #16213e; border-radius: 12px; padding: 4px;
+  }
+  .mode-tab {
+    flex: 1; padding: 8px 0; border: none; border-radius: 10px;
+    background: transparent; color: #888; font-size: 0.85rem;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .mode-tab.active {
+    background: #e94560; color: #fff; box-shadow: 0 4px 15px rgba(233,69,96,0.3);
+  }
+
+  .timer-ring {
+    position: relative;
+    width: 260px; height: 260px;
+    margin: 0 auto 30px;
+  }
+  svg { transform: rotate(-90deg); width: 260px; height: 260px; }
+  .ring-bg { fill: none; stroke: #16213e; stroke-width: 10; }
+  .ring-fg { fill: none; stroke: #e94560; stroke-width: 10; stroke-linecap: round; transition: stroke-dashoffset 0.3s; }
+  .time-display {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  }
+  .time-text {
+    font-size: 3.8rem; font-weight: 700; font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+  }
+  .session-label {
+    font-size: 0.8rem; color: #888; margin-top: 2px;
+  }
+
+  .controls {
+    display: flex; gap: 12px; justify-content: center; margin-bottom: 24px;
+  }
+  .btn {
+    padding: 12px 28px; border: none; border-radius: 25px;
+    font-size: 1rem; font-weight: 600; cursor: pointer; transition: all 0.2s;
+    letter-spacing: 0.03em;
+  }
+  .btn-start {
+    background: #e94560; color: #fff;
+    box-shadow: 0 4px 20px rgba(233,69,96,0.35);
+  }
+  .btn-start:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(233,69,96,0.45); }
+  .btn-reset { background: transparent; color: #888; border: 1.5px solid #333; }
+  .btn-reset:hover { color: #eee; border-color: #555; }
+
+  .stats {
+    color: #666; font-size: 0.82rem;
+  }
+  .stats span { color: #e94560; font-weight: 600; }
+
+  .footer {
+    margin-top: 40px; color: #444; font-size: 0.75rem;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <h1>番茄钟</h1>
+
+  <div class="mode-tabs">
+    <button class="mode-tab active" data-mode="focus">专注 25</button>
+    <button class="mode-tab" data-mode="short">短休 5</button>
+    <button class="mode-tab" data-mode="long">长休 15</button>
+  </div>
+
+  <div class="timer-ring">
+    <svg viewBox="0 0 260 260">
+      <circle class="ring-bg" cx="130" cy="130" r="120"/>
+      <circle class="ring-fg" id="ring" cx="130" cy="130" r="120"
+              stroke-dasharray="753.98" stroke-dashoffset="0"/>
+    </svg>
+    <div class="time-display">
+      <div class="time-text" id="time">25:00</div>
+      <div class="session-label" id="label">准备开始</div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="btn btn-start" id="startBtn">开始</button>
+    <button class="btn btn-reset" id="resetBtn">重置</button>
+  </div>
+
+  <div class="stats">
+    今日完成 <span id="count">0</span> 个番茄
+  </div>
+
+  <div class="footer">专注 25 分钟 · 短休 5 分钟 · 长休 15 分钟</div>
+</div>
+
+<script>
+  const MODES = {
+    focus:   { label: '专注中', minutes: 25, next: 'short', bodyClass: '' },
+    short:   { label: '短休中', minutes:  5, next: 'focus', bodyClass: 'break' },
+    long:    { label: '长休中', minutes: 15, next: 'focus', bodyClass: 'long-break' },
+  };
+
+  let currentMode = 'focus';
+  let remaining  = MODES.focus.minutes * 60; // seconds
+  let total      = remaining;
+  let timerId    = null;
+  let running    = false;
+  let todayCount = 0;
+
+  // ── DOM refs ──────────────────────────────────────
+  const $time    = document.getElementById('time');
+  const $label   = document.getElementById('label');
+  const $ring    = document.getElementById('ring');
+  const $start   = document.getElementById('startBtn');
+  const $reset   = document.getElementById('resetBtn');
+  const $count   = document.getElementById('count');
+  const $body    = document.body;
+  const $tabs    = document.querySelectorAll('.mode-tab');
+
+  const CIRCUMFERENCE = 2 * Math.PI * 120; // ≈ 753.98
+
+  // ── helpers ───────────────────────────────────────
+  function fmt(sec) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  }
+
+  function updateUI() {
+    $time.textContent   = fmt(remaining);
+    $label.textContent  = running ? MODES[currentMode].label : '暂停中';
+
+    const progress = 1 - remaining / total;
+    $ring.style.strokeDashoffset = CIRCUMFERENCE * progress;
+  }
+
+  function applyMode(mode) {
+    currentMode = mode;
+    remaining   = MODES[mode].minutes * 60;
+    total       = remaining;
+    running     = false;
+    timerId && clearInterval(timerId);
+    timerId = null;
+
+    $start.textContent = '开始';
+    $ring.style.strokeDashoffset = 0;
+
+    $body.className = MODES[mode].bodyClass;
+    $tabs.forEach(t => t.classList.toggle('active', t.dataset.mode === mode));
+    updateUI();
+  }
+
+  function onTick() {
+    if (remaining <= 0) {
+      clearInterval(timerId);
+      timerId = null;
+      running = false;
+      $start.textContent = '开始';
+
+      if (currentMode === 'focus') {
+        todayCount++;
+        $count.textContent = todayCount;
+      }
+
+      try { new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACAf39/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+Af39/gH9/f4B/f3+AA==').play(); } catch (_) {}
+
+      // auto-switch to next mode (short break after focus, back to focus after break)
+      applyMode(MODES[currentMode].next);
+      return;
+    }
+    remaining--;
+    updateUI();
+  }
+
+  // ── event handlers ────────────────────────────────
+  $start.onclick = () => {
+    if (running) {
+      clearInterval(timerId); timerId = null; running = false;
+      $start.textContent = '继续';
+      $label.textContent = '暂停中';
+    } else {
+      running = true;
+      $start.textContent = '暂停';
+      $label.textContent = MODES[currentMode].label;
+      timerId = setInterval(onTick, 1000);
+    }
+  };
+
+  $reset.onclick = () => applyMode(currentMode);
+
+  $tabs.forEach(tab => {
+    tab.onclick = () => { if (!running || confirm('切换模式将重置计时，确定吗？')) applyMode(tab.dataset.mode); };
+  });
+
+  // ── init ──────────────────────────────────────────
+  updateUI();
+</script>
+</body>
+</html>
