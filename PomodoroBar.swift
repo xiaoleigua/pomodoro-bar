@@ -1,7 +1,55 @@
 import AppKit
 import UserNotifications
 
-// ── Model ─────────────────────────────────────────────────
+// ── Color Helpers ───────────────────────────────────────────
+struct PomodoroColors {
+    let bg: NSColor
+    let surface: NSColor
+    let accent: NSColor
+    let accentSoft: NSColor
+    let ringBg: NSColor
+    let ringFg: NSColor
+    let text: NSColor
+    let textDim: NSColor
+
+    static func forMode(_ mode: PomodoroModel.Mode) -> PomodoroColors {
+        switch mode {
+        case .focus:
+            return PomodoroColors(
+                bg: NSColor(red: 0.961, green: 0.941, blue: 0.910, alpha: 1),
+                surface: NSColor(red: 0.929, green: 0.902, blue: 0.855, alpha: 1),
+                accent: NSColor(red: 0.780, green: 0.357, blue: 0.290, alpha: 1),
+                accentSoft: NSColor(red: 0.878, green: 0.659, blue: 0.573, alpha: 1),
+                ringBg: NSColor(red: 0.859, green: 0.824, blue: 0.761, alpha: 1),
+                ringFg: NSColor(red: 0.780, green: 0.357, blue: 0.290, alpha: 1),
+                text: NSColor(red: 0.173, green: 0.141, blue: 0.086, alpha: 1),
+                textDim: NSColor(red: 0.549, green: 0.502, blue: 0.439, alpha: 1)
+            )
+        case .short:
+            return PomodoroColors(
+                bg: NSColor(red: 0.929, green: 0.922, blue: 0.894, alpha: 1),
+                surface: NSColor(red: 0.894, green: 0.882, blue: 0.847, alpha: 1),
+                accent: NSColor(red: 0.478, green: 0.604, blue: 0.494, alpha: 1),
+                accentSoft: NSColor(red: 0.722, green: 0.800, blue: 0.710, alpha: 1),
+                ringBg: NSColor(red: 0.835, green: 0.827, blue: 0.784, alpha: 1),
+                ringFg: NSColor(red: 0.478, green: 0.604, blue: 0.494, alpha: 1),
+                text: NSColor(red: 0.173, green: 0.141, blue: 0.086, alpha: 1),
+                textDim: NSColor(red: 0.549, green: 0.502, blue: 0.439, alpha: 1)
+            )
+        case .long:
+            return PomodoroColors(
+                bg: NSColor(red: 0.910, green: 0.898, blue: 0.871, alpha: 1),
+                surface: NSColor(red: 0.871, green: 0.859, blue: 0.824, alpha: 1),
+                accent: NSColor(red: 0.545, green: 0.490, blue: 0.420, alpha: 1),
+                accentSoft: NSColor(red: 0.769, green: 0.722, blue: 0.659, alpha: 1),
+                ringBg: NSColor(red: 0.816, green: 0.800, blue: 0.761, alpha: 1),
+                ringFg: NSColor(red: 0.545, green: 0.490, blue: 0.420, alpha: 1),
+                text: NSColor(red: 0.173, green: 0.141, blue: 0.086, alpha: 1),
+                textDim: NSColor(red: 0.549, green: 0.502, blue: 0.439, alpha: 1)
+            )
+        }
+    }
+}
 class PomodoroModel {
     enum Mode: String { case focus, short, long }
 
@@ -120,9 +168,9 @@ class PomodoroModel {
 
 // ── Ring View ────────────────────────────────────────────
 class RingView: NSView {
-    var progress: CGFloat = 0 {
-        didSet { updateRing() }
-    }
+    var progress: CGFloat = 0 { didSet { updateRing() } }
+    var ringBgColor: NSColor = NSColor(white: 0.85, alpha: 1) { didSet { bgLayer.strokeColor = ringBgColor.cgColor } }
+    var ringFgColor: NSColor = NSColor(red: 0.78, green: 0.36, blue: 0.29, alpha: 1) { didSet { fgLayer.strokeColor = ringFgColor.cgColor } }
 
     private let bgLayer = CAShapeLayer()
     private let fgLayer = CAShapeLayer()
@@ -136,25 +184,18 @@ class RingView: NSView {
     required init?(coder: NSCoder) { fatalError() }
 
     private func setupLayers() {
-        let r: CGFloat = 100
-        let center = CGPoint(x: bounds.midX, y: bounds.midY)
-        let path = CGMutablePath()
-        path.addArc(center: center, radius: r, startAngle: -.pi/2, endAngle: .pi*1.5, clockwise: false)
-
-        bgLayer.path = path
         bgLayer.fillColor = nil
-        bgLayer.strokeColor = NSColor(white: 0.85, alpha: 1).cgColor
         bgLayer.lineWidth = 8
         bgLayer.lineCap = .round
+        bgLayer.strokeColor = ringBgColor.cgColor
         layer?.addSublayer(bgLayer)
 
-        fgLayer.path = path
         fgLayer.fillColor = nil
-        fgLayer.strokeColor = NSColor(red: 0.91, green: 0.27, blue: 0.38, alpha: 1).cgColor
         fgLayer.lineWidth = 8
         fgLayer.lineCap = .round
         fgLayer.strokeStart = 0
         fgLayer.strokeEnd = 0
+        fgLayer.strokeColor = ringFgColor.cgColor
         layer?.addSublayer(fgLayer)
     }
 
@@ -183,6 +224,8 @@ class PomodoroViewController: NSViewController {
     private var startBtn: NSButton!
     private var resetBtn: NSButton!
     private var countLabel: NSTextField!
+    private var quitBtn: NSButton!
+    private var tabBg: NSView!
     private var tabViews: [NSView] = []
     private var tabLabels: [NSTextField] = []
 
@@ -192,10 +235,12 @@ class PomodoroViewController: NSViewController {
     }
     required init?(coder: NSCoder) { fatalError() }
 
+    private var currentColors: PomodoroColors { PomodoroColors.forMode(model.mode) }
+
     override func loadView() {
         view = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 390))
         view.wantsLayer = true
-        view.layer?.backgroundColor = NSColor(red: 0.97, green: 0.96, blue: 0.95, alpha: 1).cgColor
+        view.layer?.backgroundColor = currentColors.bg.cgColor
         buildUI()
         refreshUI()
     }
@@ -215,25 +260,28 @@ class PomodoroViewController: NSViewController {
     }
 
     private func buildUI() {
-        let title = NSTextField(labelWithString: "番茄钟")
-        title.font = NSFont.systemFont(ofSize: 18, weight: .semibold)
-        title.textColor = NSColor(red: 0.91, green: 0.27, blue: 0.38, alpha: 1)
+        let colors = currentColors
+
+        let title = NSTextField(labelWithString: "番 茄 钟")
+        title.font = NSFont(name: "Times New Roman", size: 20) ?? NSFont.systemFont(ofSize: 20, weight: .medium)
+        title.textColor = colors.accent
 
         // Mode tabs container
         let tabBg = NSView()
         tabBg.wantsLayer = true
-        tabBg.layer?.backgroundColor = NSColor(red: 0.90, green: 0.90, blue: 0.91, alpha: 1).cgColor
-        tabBg.layer?.cornerRadius = 10
+        tabBg.layer?.backgroundColor = colors.surface.cgColor
+        tabBg.layer?.cornerRadius = 12
+        self.tabBg = tabBg
 
         let modes: [(PomodoroModel.Mode, String)] = [(.focus, "专注 25"), (.short, "短休 5"), (.long, "长休 15")]
         for (mode, title) in modes {
             let tabView = NSView()
             tabView.wantsLayer = true
-            tabView.layer?.cornerRadius = 8
+            tabView.layer?.cornerRadius = 9
             tabView.identifier = NSUserInterfaceItemIdentifier(mode.rawValue)
 
             let lbl = NSTextField(labelWithString: title)
-            lbl.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+            lbl.font = NSFont(name: "Times New Roman", size: 13) ?? NSFont.systemFont(ofSize: 13)
             lbl.alignment = .center
             tabView.addSubview(lbl)
             tabLabels.append(lbl)
@@ -246,36 +294,52 @@ class PomodoroViewController: NSViewController {
 
         // Ring
         ringView = RingView(frame: NSRect(x: 0, y: 0, width: 220, height: 220))
-        ringView.translatesAutoresizingMaskIntoConstraints = false
+        ringView.ringBgColor = colors.ringBg
+        ringView.ringFgColor = colors.ringFg
 
         // Time label (overlaid on ring)
         timeLabel = NSTextField(labelWithString: "25:00")
-        timeLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 48, weight: .bold)
-        timeLabel.textColor = NSColor(white: 0.15, alpha: 1)
+        timeLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 48, weight: .regular)
+        timeLabel.textColor = colors.text
         timeLabel.alignment = .center
 
         statusLabel = NSTextField(labelWithString: "准备开始")
-        statusLabel.font = NSFont.systemFont(ofSize: 11)
-        statusLabel.textColor = NSColor(white: 0.45, alpha: 1)
+        statusLabel.font = NSFont(name: "Times New Roman", size: 12) ?? NSFont.systemFont(ofSize: 12)
+        statusLabel.textColor = colors.textDim
         statusLabel.alignment = .center
 
         // Buttons
         startBtn = NSButton(title: "开始", target: self, action: #selector(startClicked))
-        startBtn.bezelStyle = .rounded
-        startBtn.font = NSFont.systemFont(ofSize: 14, weight: .semibold)
-        startBtn.contentTintColor = NSColor(red: 0.91, green: 0.27, blue: 0.38, alpha: 1)
+        startBtn.isBordered = false
+        startBtn.wantsLayer = true
+        startBtn.layer?.cornerRadius = 17
+        startBtn.layer?.backgroundColor = colors.accent.cgColor
+        startBtn.font = NSFont.systemFont(ofSize: 14, weight: .medium)
+        startBtn.contentTintColor = .white
+        startBtn.alignment = .center
 
         resetBtn = NSButton(title: "重置", target: self, action: #selector(resetClicked))
-        resetBtn.bezelStyle = .rounded
+        resetBtn.isBordered = false
+        resetBtn.wantsLayer = true
+        resetBtn.layer?.cornerRadius = 17
+        resetBtn.layer?.borderWidth = 1.5
+        resetBtn.layer?.borderColor = colors.ringBg.cgColor
         resetBtn.font = NSFont.systemFont(ofSize: 14, weight: .medium)
-        resetBtn.isBordered = true
-        resetBtn.contentTintColor = NSColor(white: 0.40, alpha: 1)
+        resetBtn.contentTintColor = colors.textDim
+        resetBtn.alignment = .center
 
         // Count
         countLabel = NSTextField(labelWithString: "")
-        countLabel.font = NSFont.systemFont(ofSize: 12)
-        countLabel.textColor = NSColor(white: 0.50, alpha: 1)
+        countLabel.font = NSFont(name: "Times New Roman", size: 12) ?? NSFont.systemFont(ofSize: 12)
+        countLabel.textColor = colors.textDim
         countLabel.alignment = .center
+
+        // Quit
+        quitBtn = NSButton(title: "退出", target: self, action: #selector(quitApp))
+        quitBtn.bezelStyle = .inline
+        quitBtn.isBordered = false
+        quitBtn.font = NSFont(name: "Times New Roman", size: 11) ?? NSFont.systemFont(ofSize: 11)
+        quitBtn.contentTintColor = colors.textDim
 
         // Add subviews
         view.addSubview(title)
@@ -287,8 +351,9 @@ class PomodoroViewController: NSViewController {
         view.addSubview(startBtn)
         view.addSubview(resetBtn)
         view.addSubview(countLabel)
+        view.addSubview(quitBtn)
 
-        // Layout - manual frames for simplicity & compatibility
+        // Layout
         title.frame = NSRect(x: 20, y: 350, width: 260, height: 24)
 
         tabBg.frame = NSRect(x: 20, y: 312, width: 260, height: 32)
@@ -302,27 +367,42 @@ class PomodoroViewController: NSViewController {
         timeLabel.frame = NSRect(x: 40, y: 168, width: 220, height: 48)
         statusLabel.frame = NSRect(x: 40, y: 148, width: 220, height: 18)
 
-        startBtn.frame = NSRect(x: 60, y: 50, width: 100, height: 30)
-        resetBtn.frame = NSRect(x: 180, y: 50, width: 80, height: 30)
-        countLabel.frame = NSRect(x: 20, y: 18, width: 260, height: 18)
+        startBtn.frame = NSRect(x: 55, y: 46, width: 100, height: 34)
+        resetBtn.frame = NSRect(x: 175, y: 46, width: 80, height: 34)
+        countLabel.frame = NSRect(x: 20, y: 22, width: 260, height: 18)
+        quitBtn.frame = NSRect(x: 248, y: -2, width: 36, height: 22)
     }
 
     private func refreshUI() {
+        let colors = currentColors
+
         timeLabel.stringValue = format(model.remaining)
+        timeLabel.textColor = colors.text
         statusLabel.stringValue = model.sessionLabel
+        statusLabel.textColor = colors.textDim
         ringView.progress = model.total > 0 ? CGFloat(model.remaining) / CGFloat(model.total) : 1
+        ringView.ringBgColor = colors.ringBg
+        ringView.ringFgColor = colors.ringFg
 
         startBtn.title = model.isRunning ? "暂停" : "开始"
+        startBtn.contentTintColor = .white
+        startBtn.layer?.backgroundColor = colors.accent.cgColor
+        resetBtn.contentTintColor = colors.textDim
+        resetBtn.layer?.borderColor = colors.ringBg.cgColor
         countLabel.stringValue = "今日完成 \(model.todayCount) 个番茄"
+        countLabel.textColor = colors.textDim
+
+        view.layer?.backgroundColor = colors.bg.cgColor
+        tabBg.layer?.backgroundColor = colors.surface.cgColor
 
         for (i, tab) in tabViews.enumerated() {
             let isActive = tab.identifier?.rawValue == model.mode.rawValue
             if isActive {
-                tab.layer?.backgroundColor = NSColor(red: 0.91, green: 0.27, blue: 0.38, alpha: 1).cgColor
+                tab.layer?.backgroundColor = colors.accent.cgColor
                 tabLabels[i].textColor = .white
             } else {
                 tab.layer?.backgroundColor = nil
-                tabLabels[i].textColor = NSColor(white: 0.40, alpha: 1)
+                tabLabels[i].textColor = colors.textDim
             }
         }
     }
@@ -353,6 +433,8 @@ class PomodoroViewController: NSViewController {
     @objc private func startClicked() { model.toggle() }
 
     @objc private func resetClicked() { model.reset() }
+
+    @objc private func quitApp() { NSApplication.shared.terminate(nil) }
 
     private func sendNotification(for mode: PomodoroModel.Mode) {
         let center = UNUserNotificationCenter.current()
@@ -399,17 +481,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private func setupStatusBar() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
-        // Right-click menu
-        let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "退出", action: #selector(quitApp), keyEquivalent: "q"))
-        statusItem.menu = menu
-
         if let button = statusItem.button {
             button.title = "25:00"
-            button.font = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .medium)
+            button.font = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular)
             button.action = #selector(statusClicked)
             button.target = self
-            button.sendAction(on: [.leftMouseUp])
         }
     }
 
