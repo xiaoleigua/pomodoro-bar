@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(killall PomodoroBar)",
+      "Bash(killall PomodoroBar *)",
+      "Bash(bash build.sh)",
+      "Bash(open ./build/PomodoroBar.app)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(gh repo create *)"
+    ]
+  }
+}
